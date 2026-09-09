@@ -311,6 +311,7 @@ def main():
             if submitted:
                 # Prepare input data
                 input_data = {
+                    'state': 'Odisha',
                     'district': district,
                     'crop': crop,
                     'season': season,
@@ -452,4 +453,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
