@@ -7,12 +7,16 @@ Supports both English and Odia languages.
 """
 
 import streamlit as st
-import requests
-import json
-import pandas as pd
+import sys
+from pathlib import Path
 from typing import Dict, Any, List
-import plotly.express as px
 import plotly.graph_objects as go
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.api.weather_client import WeatherClient
+from src.inference.predictor import CropYieldPredictor
 
 
 # Language translations
@@ -90,24 +94,45 @@ IRRIGATION_METHODS = ['Flood', 'Sprinkler', 'Drip']
 SOIL_TYPES = ['Clay', 'Sandy', 'Loam']
 SEED_VARIETIES = ['HYV', 'Traditional']
 
-# API configuration
-API_BASE_URL = "http://localhost:8000"
-
-
 def get_translation(key: str, language: str = 'en') -> str:
     """Get translation for a key in the specified language."""
     return TRANSLATIONS.get(language, TRANSLATIONS['en']).get(key, key)
 
 
+@st.cache_resource
+def get_predictor() -> CropYieldPredictor:
+    """Load the trained model once for the Streamlit process."""
+    predictor = CropYieldPredictor()
+    if not predictor.load_model():
+        raise RuntimeError("The crop yield model could not be loaded.")
+    return predictor
+
+
+@st.cache_resource
+def get_weather_client() -> WeatherClient:
+    """Create the weather client once for the Streamlit process."""
+    return WeatherClient()
+
+
 def call_prediction_api(input_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Call the prediction API with input data."""
-    try:
-        response = requests.post(f"{API_BASE_URL}/predict", json=input_data, timeout=30)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        st.error(f"API Error: {str(e)}")
-        return None
+    """Run a prediction locally so the Streamlit deployment is self-contained."""
+    predictor = get_predictor()
+    weather = get_weather_client().get_recent_weather(
+        input_data["district"], input_data.get("year", 2023)
+    )
+    prediction_input = {
+        **input_data,
+        "rainfall": weather["rainfall"],
+        "temperature": weather["temperature"],
+        "soil_type": input_data.get("soil_type", "Clay"),
+        "seed_variety": input_data.get("seed_variety", "HYV"),
+    }
+    result = predictor.predict_yield(prediction_input)
+    return {
+        **result,
+        "recommendations": predictor.generate_recommendations(prediction_input),
+        "weather_data": weather,
+    }
 
 
 def create_yield_chart(prediction_data: Dict[str, Any], language: str = 'en') -> go.Figure:
@@ -427,5 +452,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
