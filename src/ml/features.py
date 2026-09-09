@@ -20,13 +20,17 @@ def normalize_per_ha(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         DataFrame with additional per hectare columns
     """
+    required_columns = {'fertilizer', 'pesticide', 'area'}
+    missing_columns = required_columns.difference(df.columns)
+    if missing_columns:
+        raise KeyError(
+            f"DataFrame is missing required columns: {', '.join(sorted(missing_columns))}"
+        )
+
     df = df.copy()
     
-    if 'fertilizer' in df.columns and 'area' in df.columns:
-        df['fertilizer_per_ha'] = df['fertilizer'] / df['area']
-    
-    if 'pesticide' in df.columns and 'area' in df.columns:
-        df['pesticide_per_ha'] = df['pesticide'] / df['area']
+    df['fertilizer_per_ha'] = df['fertilizer'] / df['area']
+    df['pesticide_per_ha'] = df['pesticide'] / df['area']
         
     return df
 
@@ -135,7 +139,10 @@ def get_feature_summary(df: pd.DataFrame) -> Dict[str, Any]:
         'shape': df.shape,
         'numeric_summary': df.describe(),
         'categorical_summary': {
-            col: df[col].value_counts()
+            col: {
+                'value_counts': df[col].value_counts(),
+                'most_common': df[col].mode().iloc[0] if not df[col].mode().empty else None,
+            }
             for col in df.select_dtypes(include=['object']).columns
         },
         'missing_values': df.isnull().sum()
